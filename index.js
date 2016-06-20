@@ -173,7 +173,7 @@ exports.handler = function (event, context) {
       
       // we only keep track of the original key since we can use it to derive all other versions
       return_value.data = {
-        key: path.join(event.s3_output_dir + resp[opts.file_name][0])
+        key: path.join(event.s3_output_dir, resp[opts.file_name][0])
       };
       
       console.log("lambda_process_images: Finished image processing");
