@@ -1,0 +1,241 @@
+/**
+ * Module expects AWS credentials (S3 specifically) to be available as specified by AWS Node.js sdk setup
+ * If running locally, (not in lambda) there should be a GLOBAL.gAppRoot variable that points to the applications root directory
+ * This module takes the the image from the specified s3 bucket and key, saves them in the local
+ * directory (if not in lambda), processes them, and re-uploads back to s3
+ */
+
+var Promise         = require('bluebird');
+var cuid            = require('cuid');
+var fs              = require('fs');
+var path            = require('path');
+var mkdirp          = require('mkdirp');
+var rimraf          = require('rimraf');
+var aws_wrapper     = new (require('aws_wrapper').Aws_wrapper)();
+var image_functions = new (require('image_functions').image_functions)();
+var ajv             = require("ajv")({
+  removeAdditional: false
+});
+Promise.promisifyAll(fs);
+require('dotenv').config();
+
+/**
+ * @typedef ReturnValue
+ * @type Object
+ * @property {object[]} processed_images An array of processes images
+ */
+
+/**
+ *
+ * @param {object} event
+ * @param {string} event.s3_bucket_name
+ * @param {string} event.s3_key
+ * @param {string} event.s3_output_dir
+ * @param {object[]} event.versions
+ * @param {object} context
+ * @returns {ReturnValue}
+ */
+exports.handler = function (event, context) {
+  
+  var schema = {
+    type                : 'object',
+    additionalProperties: false,
+    required            : ['s3_key', 's3_bucket_name', 's3_output_dir'],
+    properties          : {
+      s3_key        : {
+        type     : 'string',
+        minLength: 1
+      },
+      s3_bucket_name: {
+        type     : 'string',
+        minLength: 1
+      },
+      s3_output_dir : {
+        type     : 'string',
+        minLength: 1
+      },
+      versions      : {
+        type: 'array' // see image_functions for complete format
+      }
+    }
+  };
+  
+  if (process.env.MODULE_ENV !== 'lambda_process_images') {
+    if (typeof GLOBAL.gAppRoot !== 'string' || GLOBAL.gAppRoot.length === 0) {
+      throw new Error('GLOBAL.gAppRoot should be defined in non lambda environment');
+    }
+  }
+  
+  var opts = {
+    file_name : null,
+    input_dir : process.env.MODULE_ENV === 'lambda_process_images' ? '/tmp/images/input/' + cuid() + '/' : GLOBAL.gAppRoot + '/uploads/images/input' + cuid() + '/',
+    output_dir: process.env.MODULE_ENV === 'lambda_process_images' ? '/tmp/images/output/' + cuid() + '/' : GLOBAL.gAppRoot + '/uploads/images/output' + cuid() + '/'
+  };
+  
+  var return_value = {};
+  
+  return Promise.resolve()
+    .then(function () {
+      
+      var valid = ajv.validate(schema, event);
+      
+      if (!valid) {
+        var e = new Error(ajv.errorsText());
+        e.ajv = ajv.errors;
+        throw e;
+      }
+      
+      console.log("lambda_process_images: Validation complete");
+      return true;
+      
+    })
+    .then(function () {
+      // ensure the input and output directories exist
+      
+      return Promise.resolve()
+        .then(function () {
+          
+          return new Promise(function (resolve, reject) {
+            
+            mkdirp(opts.input_dir, function (err) {
+              if (err) {
+                reject(err);
+              }
+              else {
+                resolve(true);
+              }
+            });
+            
+          });
+          
+        })
+        .then(function () {
+          
+          return new Promise(function (resolve, reject) {
+            
+            mkdirp(opts.output_dir, function (err) {
+              if (err) {
+                reject(err);
+              }
+              else {
+                resolve(true);
+              }
+            });
+            
+          });
+          
+        });
+      
+    })
+    .then(function () {
+      opts.file_name = path.basename(opts.key);
+      console.log("lambda_process_images: file_name = " + opts.file_name);
+      return true;
+    })
+    .then(function () {
+      // get the object
+      console.log("lambda_process_images: Getting object from s3");
+      
+      return aws_wrapper.S3_wrapper.getObject({
+          s3_bucket_name: event.s3_bucket_name,
+          s3_key        : event.s3_key
+        })
+        .then(function (buffer) {
+          console.log("lambda_process_images: Got object from s3");
+          
+          return fs.writeFileAsync(path.join(opts.input_dir, opts.file_name), buffer);
+        });
+    })
+    .then(function () {
+      //process
+      console.log("lambda_process_images: Starting image processing");
+      
+      var process_opts = {
+        dir       : opts.input_dir,
+        output_dir: opts.output_dir,
+        versions  : opts.versions
+      };
+      
+      return image_functions.process_image3(process_opts);
+    })
+    .then(function (resp) {
+      
+      /*
+       * FORMAT, for an image 'test_image1.jpg', the function returns an object
+       * { 'test_image1.jpg': [
+       'test_image1_aspR_2.038_w815_h400_e.jpg',
+       'test_image1_aspR_2.038_w815_h400_e400.jpg',
+       'test_image1_aspR_2.038_w815_h400_e80.jpg',
+       'test_image1_aspR_2.038_w815_h400_e200.jpg'
+       ] }
+       *
+       * */
+      
+      // we only keep track of the original key since we can use it to derive all other versions
+      return_value.data = {
+        key: path.join(event.s3_output_dir + resp[opts.file_name][0])
+      };
+      
+      console.log("lambda_process_images: Finished image processing");
+      return true;
+    })
+    .then(function () {
+      
+      console.log("lambda_process_images: Uploading back to S3");
+      
+      return aws_wrapper.S3_wrapper.uploadFiles({
+          dir           : opts.output_dir,
+          s3_bucket_name: event.s3_bucket_name,
+          s3_output_dir : event.s3_output_dir,
+          acl           : 'public-read',
+          CacheControl  : 15552000
+        })
+        .then(function () {
+          console.log("lambda_process_images: Successfully uploaded back to S3");
+          return true;
+        });
+    })
+    .then(function () {
+      // delete the directories
+
+      console.log("lambda_process_images: Cleaning up");
+
+      return Promise.resolve()
+        .then(function () {
+
+          return new Promise(function (resolve, reject) {
+            rimraf(opts.input_dir, function (e) {
+              if (e) {
+                reject(e);
+              }
+              else {
+                resolve(true);
+              }
+            });
+          });
+
+        })
+        .then(function () {
+
+          return new Promise(function (resolve, reject) {
+            rimraf(opts.output_dir, function (e) {
+              if (e) {
+                reject(e);
+              }
+              else {
+                resolve(true);
+              }
+            });
+          });
+
+        })
+        .then(function () {
+          console.log("lambda_process_images: Finished cleaning up");
+        });
+    })
+    .then(function () {
+      console.log("lambda_process_images: Returning");
+      return context.succeed(return_value);
+    });
+
+};
