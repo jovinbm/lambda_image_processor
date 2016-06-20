@@ -68,8 +68,8 @@ exports.handler = function (event, context) {
   
   var opts = {
     file_name : null,
-    input_dir : process.env.MODULE_ENV === 'lambda_process_images' ? '/tmp/images/input/' + cuid() + '/' : GLOBAL.gAppRoot + '/uploads/images/input' + cuid() + '/',
-    output_dir: process.env.MODULE_ENV === 'lambda_process_images' ? '/tmp/images/output/' + cuid() + '/' : GLOBAL.gAppRoot + '/uploads/images/output' + cuid() + '/'
+    input_dir : process.env.MODULE_ENV === 'lambda_process_images' ? '/tmp/images/input/' : GLOBAL.gAppRoot + '/uploads/images/input' + cuid() + '/',
+    output_dir: process.env.MODULE_ENV === 'lambda_process_images' ? '/tmp/images/output/' : GLOBAL.gAppRoot + '/uploads/images/output' + cuid() + '/'
   };
   
   var return_value = {};
