@@ -1,10 +1,14 @@
 {
-  "name": "lamda_process_images",
+  "name": "lamda_image_processor",
   "version": "0.0.1",
   "description": "An AWS Lambda processing function that is used at The African Exponent",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jovinbm/lambda_image_processor.git"
   },
   "author": "jovinbeda@hotmail.com",
   "license": "ISC",
