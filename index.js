@@ -128,7 +128,7 @@ exports.handler = function (event, context) {
       
     })
     .then(function () {
-      opts.file_name = path.basename(opts.key);
+      opts.file_name = path.basename(event.s3_key);
       console.log("lambda_process_images: file_name = " + opts.file_name);
       return true;
     })
@@ -153,7 +153,7 @@ exports.handler = function (event, context) {
       var process_opts = {
         dir       : opts.input_dir,
         output_dir: opts.output_dir,
-        versions  : opts.versions
+        versions  : event.versions
       };
       
       return image_functions.process_image3(process_opts);
