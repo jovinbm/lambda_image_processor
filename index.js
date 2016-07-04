@@ -1,6 +1,6 @@
 /**
  * Module expects AWS credentials (S3 specifically) to be available as specified by AWS Node.js sdk setup
- * If running locally, (not in lambda) there should be a GLOBAL.gAppRoot variable that points to the applications root directory
+ * If running locally, (not in lambda) there should be a global.gAppRoot variable that points to the applications root directory
  * This module takes the the image from the specified s3 bucket and key, saves them in the local
  * directory (if not in lambda), processes them, and re-uploads back to s3
  */
@@ -61,15 +61,15 @@ exports.handler = function (event, context) {
   };
   
   if (process.env.MODULE_ENV !== 'lambda_process_images') {
-    if (typeof GLOBAL.gAppRoot !== 'string' || GLOBAL.gAppRoot.length === 0) {
-      throw new Error('GLOBAL.gAppRoot should be defined in non lambda environment');
+    if (typeof global.gAppRoot !== 'string' || global.gAppRoot.length === 0) {
+      throw new Error('global.gAppRoot should be defined in non lambda environment');
     }
   }
   
   var opts = {
     file_name : null,
-    input_dir : process.env.MODULE_ENV === 'lambda_process_images' ? '/tmp/images/input/' : GLOBAL.gAppRoot + '/uploads/images/input-' + cuid() + '/',
-    output_dir: process.env.MODULE_ENV === 'lambda_process_images' ? '/tmp/images/output/' : GLOBAL.gAppRoot + '/uploads/images/output-' + cuid() + '/'
+    input_dir : process.env.MODULE_ENV === 'lambda_process_images' ? '/tmp/images/input/' : global.gAppRoot + '/uploads/images/input-' + cuid() + '/',
+    output_dir: process.env.MODULE_ENV === 'lambda_process_images' ? '/tmp/images/output/' : global.gAppRoot + '/uploads/images/output-' + cuid() + '/'
   };
   
   var return_value = {};

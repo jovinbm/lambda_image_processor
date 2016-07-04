@@ -1,6 +1,6 @@
 {
   "name": "lamda_image_processor",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "An AWS Lambda processing function that is used at The African Exponent",
   "main": "index.js",
   "scripts": {
