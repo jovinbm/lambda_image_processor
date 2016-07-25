@@ -60,12 +60,6 @@ exports.config = function (opts) {
 };
 
 /**
- * @typedef ReturnValue
- * @type Object
- * @property {object[]} processed_images An array of processes images
- */
-
-/**
  *
  * @param {object} event
  * @param {string} event.s3_bucket_name
@@ -73,7 +67,7 @@ exports.config = function (opts) {
  * @param {string} event.s3_output_dir
  * @param {object[]} event.versions
  * @param {object} context
- * @returns {ReturnValue}
+ * @returns {*}
  */
 exports.handler = function (event, context) {
   
@@ -99,12 +93,6 @@ exports.handler = function (event, context) {
       }
     }
   };
-  
-  if (process.env.MODULE_ENV !== 'lambda_process_images') {
-    if (typeof global.gAppRoot !== 'string' || global.gAppRoot.length === 0) {
-      throw new Error('global.gAppRoot should be defined in non lambda environment');
-    }
-  }
   
   var opts = {
     file_name : null,
