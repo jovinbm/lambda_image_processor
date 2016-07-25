@@ -1,11 +1,11 @@
 /**
- * Module expects AWS credentials (S3 specifically) to be available as specified by AWS Node.js sdk setup
- * If running locally, (not in lambda) there should be a global.gAppRoot variable that points to the applications root directory
- * This module takes the the image from the specified s3 bucket and key, saves them in the local
+ * -Module expects AWS credentials (S3 specifically) to be available as specified by AWS Node.js sdk setup
+ * -This module takes the the image from the specified s3 bucket and key, saves them in the local
  * directory (if not in lambda), processes them, and re-uploads back to s3
+ * - Run .config to configure the upload_folder and other settings
  */
 
-var Promise         = require('bluebird');
+var BPromise        = require('bluebird');
 var cuid            = require('cuid');
 var fs              = require('fs');
 var path            = require('path');
@@ -16,8 +16,48 @@ var image_functions = new (require('image_functions').image_functions)();
 var ajv             = require("ajv")({
   removeAdditional: false
 });
-Promise.promisifyAll(fs);
+BPromise.promisifyAll(fs);
 require('dotenv').config();
+
+var module_config = {
+  upload_folder: '/tmp/images/'
+};
+
+/**
+ *
+ * @param {object} opts
+ * @param {string} opts.upload_folder
+ */
+exports.config = function (opts) {
+  var schema = {
+    type                : 'object',
+    additionalProperties: false,
+    properties          : {
+      upload_folder: {
+        type     : 'string',
+        minLength: 1
+      }
+    }
+  };
+  
+  return BPromise.resolve()
+    .then(function () {
+      var valid = ajv.validate(schema, opts);
+      
+      if (!valid) {
+        var e = new Error(ajv.errorsText());
+        e.ajv = ajv.errors;
+        throw e;
+      }
+    })
+    .then(function () {
+      if (opts.upload_folder) {
+        module_config.upload_folder = opts.upload_folder;
+      }
+      
+      return true;
+    });
+};
 
 /**
  * @typedef ReturnValue
@@ -68,13 +108,13 @@ exports.handler = function (event, context) {
   
   var opts = {
     file_name : null,
-    input_dir : process.env.MODULE_ENV === 'lambda_process_images' ? '/tmp/images/input/' : global.gAppRoot + '/uploads/images/input-' + cuid() + '/',
-    output_dir: process.env.MODULE_ENV === 'lambda_process_images' ? '/tmp/images/output/' : global.gAppRoot + '/uploads/images/output-' + cuid() + '/'
+    input_dir : path.join(module_config.upload_folder, '/input-' + cuid() + '/'),
+    output_dir: path.join(module_config.upload_folder, '/output-' + cuid() + '/')
   };
   
   var return_value = {};
   
-  return Promise.resolve()
+  return BPromise.resolve()
     .then(function () {
       
       var valid = ajv.validate(schema, event);
@@ -92,10 +132,10 @@ exports.handler = function (event, context) {
     .then(function () {
       // ensure the input and output directories exist
       
-      return Promise.resolve()
+      return BPromise.resolve()
         .then(function () {
           
-          return new Promise(function (resolve, reject) {
+          return new BPromise(function (resolve, reject) {
             
             mkdirp(opts.input_dir, function (err) {
               if (err) {
@@ -111,7 +151,7 @@ exports.handler = function (event, context) {
         })
         .then(function () {
           
-          return new Promise(function (resolve, reject) {
+          return new BPromise(function (resolve, reject) {
             
             mkdirp(opts.output_dir, function (err) {
               if (err) {
@@ -137,9 +177,9 @@ exports.handler = function (event, context) {
       console.log("lambda_process_images: Getting object from s3");
       
       return aws_wrapper.S3_wrapper.getObject({
-          s3_bucket_name: event.s3_bucket_name,
-          s3_key        : event.s3_key
-        })
+        s3_bucket_name: event.s3_bucket_name,
+        s3_key        : event.s3_key
+      })
         .then(function (buffer) {
           console.log("lambda_process_images: Got object from s3");
           
@@ -184,12 +224,12 @@ exports.handler = function (event, context) {
       console.log("lambda_process_images: Uploading back to S3");
       
       return aws_wrapper.S3_wrapper.uploadFiles({
-          dir           : opts.output_dir,
-          s3_bucket_name: event.s3_bucket_name,
-          s3_output_dir : event.s3_output_dir,
-          acl           : 'public-read',
-          CacheControl  : 15552000
-        })
+        dir           : opts.output_dir,
+        s3_bucket_name: event.s3_bucket_name,
+        s3_output_dir : event.s3_output_dir,
+        acl           : 'public-read',
+        CacheControl  : 15552000
+      })
         .then(function () {
           console.log("lambda_process_images: Successfully uploaded back to S3");
           return true;
@@ -197,13 +237,13 @@ exports.handler = function (event, context) {
     })
     .then(function () {
       // delete the directories
-
+      
       console.log("lambda_process_images: Cleaning up");
-
-      return Promise.resolve()
+      
+      return BPromise.resolve()
         .then(function () {
-
-          return new Promise(function (resolve, reject) {
+          
+          return new BPromise(function (resolve, reject) {
             rimraf(opts.input_dir, function (e) {
               if (e) {
                 reject(e);
@@ -213,11 +253,11 @@ exports.handler = function (event, context) {
               }
             });
           });
-
+          
         })
         .then(function () {
-
-          return new Promise(function (resolve, reject) {
+          
+          return new BPromise(function (resolve, reject) {
             rimraf(opts.output_dir, function (e) {
               if (e) {
                 reject(e);
@@ -227,7 +267,7 @@ exports.handler = function (event, context) {
               }
             });
           });
-
+          
         })
         .then(function () {
           console.log("lambda_process_images: Finished cleaning up");
@@ -237,5 +277,5 @@ exports.handler = function (event, context) {
       console.log("lambda_process_images: Returning");
       return context.succeed(return_value);
     });
-
+  
 };
