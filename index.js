@@ -17,7 +17,6 @@ var ajv             = require("ajv")({
   removeAdditional: false
 });
 BPromise.promisifyAll(fs);
-require('dotenv').config();
 
 var module_config = {
   upload_folder: '/tmp/images/'
