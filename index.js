@@ -12,7 +12,7 @@ const path           = require('path');
 const mkdirp         = require('mkdirp');
 const rimraf         = require('rimraf');
 const awsWrapper     = new (require('aws_wrapper').AwsWrapper)();
-const imageFunctions = new (require('image_functions').ImageFunctions)();
+const imageFunctions = require('image_functions');
 const ajv            = require('ajv')({
   removeAdditional: false
 });
@@ -64,6 +64,7 @@ exports.config = function (opts) {
 /**
  *
  * @param {object} event
+ * @param {string} event.processImageFunction
  * @param {string} event.s3_bucket_name
  * @param {string} event.s3_key
  * @param {string} event.s3_output_dir
@@ -76,21 +77,24 @@ exports.handler = function (event, context) {
   const schema = {
     type                : 'object',
     additionalProperties: false,
-    required            : ['s3_key', 's3_bucket_name', 's3_output_dir'],
+    required            : ['processImageFunction', 's3_key', 's3_bucket_name', 's3_output_dir'],
     properties          : {
-      s3_key        : {
+      processImageFunction: {
+        enum: ['processImage3', 'processImage4']
+      },
+      s3_key              : {
         type     : 'string',
         minLength: 1
       },
-      s3_bucket_name: {
+      s3_bucket_name      : {
         type     : 'string',
         minLength: 1
       },
-      s3_output_dir : {
+      s3_output_dir       : {
         type     : 'string',
         minLength: 1
       },
-      versions      : {
+      versions            : {
         type: 'array' // see imageFunctions for complete format
       }
     }
@@ -190,7 +194,7 @@ exports.handler = function (event, context) {
         versions  : event.versions
       };
       
-      return imageFunctions.processImage3(process_opts);
+      return imageFunctions[event.processImageFunction](process_opts);
     })
     .then(function (resp) {
       
